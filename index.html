@@ -1,0 +1,322 @@
+<html>
+  <head>
+    <style>
+      body {
+        margin: 8px;
+      }
+      .container {
+        display: flex;
+        flex-direction: column;
+      }
+      .controls {
+        display: flex;
+        flex-direction: row;
+        margin-bottom: 20px;
+        position: sticky;
+        background: white;
+        font-size: 1.2rem;
+        top: 8px;
+      }
+      .controls button {
+        margin-right: 20px;
+      }
+      #title {
+        font-size: 3em;
+        margin-bottom: 5px;
+      }
+      #itemlist {
+        display: flex;
+        flex-direction: column;
+      }
+      #itemlist .item {
+        width: 100%;
+        display: flex;
+        flex-direction: row;
+        border-bottom: inset thin;
+      }
+      .item .title {
+        width: 500px;
+      }
+      .item .cost {
+        width: 100px;
+      }
+      .remove, .insert {
+        visibility: hidden;
+      }
+      #itemlist.editmode .remove, #itemlist.editmode .insert {
+        visibility: visible;
+      }
+
+      .modal {
+        display: none;
+        justify-content: center;
+        align-items: center;
+        position: fixed;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        background: rgba(0, 0, 0, 50%);
+      }
+      .modal-container {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+      }
+      #import-export-modal-container > * {
+        width: 100%;
+        margin: 5px;
+        padding: 8px;
+        font-size: 1.5rem;
+      }
+    </style>
+    <script>
+      let editmode = false;
+      function editmodeClick() {
+        editmode = !editmode;
+        document.getElementById('editmode').innerText = editmode ? 'done' : 'edit';
+        if (editmode) {
+          addEditableAtEnd();
+          document.getElementById('itemlist').classList.add('editmode');
+        } else {
+          document.querySelector('#itemlist > :last-child').remove();
+          document.getElementById('itemlist').classList.remove('editmode');
+          recalculate();
+        }
+        document.querySelectorAll('#itemlist .title').forEach((title) => title.contentEditable = editmode);
+        document.querySelectorAll('#itemlist .cost').forEach((cost) => cost.contentEditable = editmode);
+        document.getElementById('title').contentEditable = editmode;
+      }
+
+      const modalIds = [
+        'import-export-modal'
+      ];
+      function isModalOpen() {
+        return modalIds.some((id) => document.getElementById(id).style.display !== 'none');
+      }
+      function closeModals() {
+        modalIds.forEach((id) => document.getElementById(id).style.display = 'none');
+      }
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          if (isModalOpen()) {
+            closeModals();
+          } else {
+            editmodeClick();
+          }
+        }
+      });
+
+      function recalculate() {
+        let acc = 0;
+        document.querySelectorAll('#itemlist .cost').forEach((cost) => {
+          acc += parseFloat(cost.innerText || '0');
+        });
+        document.getElementById('pointtotal').innerText = acc;
+      }
+
+      function addEditableAtEnd() {
+        const newChild = document.createElement('div'); newChild.className = 'item';
+        const title = document.createElement('input'); title.className = 'title';
+        const cost = document.createElement('input'); cost.className = 'cost'; cost.type = 'number'; cost.step = 'any';
+        const add = document.createElement('button'); add.className = 'add'; add.innerText = 'add';
+
+        function addItem() {
+          const appendToEnd = document.createElement('div');
+          createItem(appendToEnd, title.value, cost.value);
+          document.getElementById('itemlist').appendChild(appendToEnd);
+          document.getElementById('itemlist').removeChild(newChild);
+          recalculate();
+          addEditableAtEnd().querySelector('.title').focus();
+        }
+        function enterListener(event) {
+          if (event.key === 'Enter') {
+            addItem();
+            return false;
+          }
+        }
+        title.addEventListener('keydown', enterListener);
+        cost.addEventListener('keydown', enterListener);
+        add.onclick = addItem;
+        newChild.appendChild(title);
+        newChild.appendChild(cost);
+        newChild.appendChild(add);
+        document.getElementById('itemlist').appendChild(newChild);
+        return newChild;
+      }
+
+      function createItem(container, titleText, costText) {
+        container.className = 'item';
+        const title = document.createElement('div'); title.className = 'title';
+        title.innerText = titleText; title.contentEditable = editmode;
+        const cost = document.createElement('div'); cost.className = 'cost';
+        cost.innerText = formatCost(costText); cost.contentEditable = editmode;
+        cost.onblur = () => {
+          cost.innerText = formatCost(cost.innerText);
+          recalculate();
+        };
+
+        // buttons
+        const remove = document.createElement('button'); remove.className = 'remove';
+        remove.innerText = 'remove';
+        remove.onclick = () => {
+          document.getElementById('itemlist').removeChild(container);
+          recalculate();
+        };
+        const insert = document.createElement('button'); insert.className = 'insert';
+        insert.innerText = 'insert';
+        insert.onclick = () => {
+          const newInsert = document.createElement('div');
+          createItem(newInsert, '', '');
+          document.getElementById('itemlist').insertBefore(newInsert, container);
+        }
+
+        container.appendChild(title);
+        container.appendChild(cost);
+        container.appendChild(remove);
+        container.appendChild(insert);
+      }
+
+      function formatCost(cost) {
+        if (cost === '') {
+          return '';
+        }
+        try {
+          const res = eval(cost);
+          if (typeof res !== 'number' || isNaN(res)) {
+            return '+0';
+          } else {
+            return res < 0 ? res : `+${res}`;
+          }
+        } catch (e) {
+          return '+0';
+        }
+      }
+
+      function generateBuild() {
+        const items = [];
+        document.querySelectorAll('#itemlist .item').forEach((item) => {
+          const titleElement = item.querySelector('div.title');
+          if (titleElement) {
+            const newItem = {
+              title: titleElement.innerText
+            };
+            const costText = item.querySelector('.cost').innerText;
+            if (costText !== '') {
+              newItem.cost = parseFloat(costText);
+            }
+            items.push(newItem);
+          }
+        });
+        const title = document.getElementById('title').innerText;
+        return {
+          title,
+          items
+        };
+      }
+
+      function exportBuild() {
+        const contentToExport = JSON.stringify(generateBuild());
+        navigator.clipboard.writeText(contentToExport);
+        document.getElementById('importInput').value = contentToExport;
+      }
+
+      function importBuild() {
+        const build = document.getElementById('importInput').value;
+        if (build) {
+          importThisBuild(build);
+        }
+      }
+
+      function importThisBuild(build) {
+        const { title, items } = JSON.parse(build);
+        if (editmode) {
+          editmodeClick();
+        }
+        document.getElementById('title').innerText = title;
+        document.getElementById('itemlist').replaceChildren();
+        document.getElementById('pointtotal').innerText = 0;
+        items.forEach((item) => {
+          const appendToEnd = document.createElement('div');
+          createItem(appendToEnd, item.title, item.cost !== undefined ? item.cost : '');
+          document.getElementById('itemlist').appendChild(appendToEnd);
+        });
+        recalculate();
+      }
+
+      // save to localStorage every 5 seconds
+      const LOCALSTORAGEKEY = 'cyoalist_build';
+      setInterval(() => {
+        const build = generateBuild();
+        if (build.items.length > 0) {
+          localStorage.setItem(LOCALSTORAGEKEY, JSON.stringify(build));
+        }
+      }, 5000);
+
+      function importFromLocalStorage() {
+        const build = localStorage.getItem(LOCALSTORAGEKEY);
+        if (build) {
+          importThisBuild(build);
+        }
+      }
+
+      function exportHumanReadableBuild() {
+        const { title, items } = generateBuild();
+        let build = title + '\n\n';
+        let runningCost = 0;
+        const titleShift = items.reduce((acc, item) => Math.max(acc, item.title.length), 0);
+        const costShift = items.reduce((acc, item) => Math.max(acc, `${formatCost(item.cost)}`.length), 0);
+        items.forEach((item, index) => {
+          if (index !== 0) {
+            build += '\n';
+          }
+          if ('cost' in item) {
+            runningCost += item.cost || 0;
+            build += item.title.padEnd(titleShift) + ' ' + `${formatCost(item.cost)}`.padEnd(costShift) + ` [${runningCost}]`;
+          } else {
+            if (item.title !== '') {
+              build += item.title;
+            }
+          }
+        });
+        navigator.clipboard.writeText(build);
+      }
+
+      function reset() {
+        if (editmode) {
+          editmodeClick();
+        }
+        document.getElementById('title').innerText = 'Title goes here';
+        document.getElementById('itemlist').replaceChildren();
+        recalculate();
+      }
+    </script>
+  </head>
+  <body>
+    <div class="container">
+      <div class="controls">
+        <button id="editmode" onclick="editmodeClick()">edit</button>
+        <button id="recalculate" onclick="recalculate()">recalculate</button>
+        <div id="pointtotal">0</div>
+        <div style="flex-grow: 1"></div>
+        <button onclick="document.getElementById('import-export-modal').style.display = 'flex'" style="margin-left: 50px; margin-right: 0">import/export</button>
+      </div>
+      <div id="content-container">
+        <div id="title">Title goes here</div>
+        <div id="itemlist"></div>
+      </div>
+    </div>
+    <div id="import-export-modal" class="modal" onclick="closeModals()">
+      <div id="import-export-modal-container" class="modal-container" onclick="event.stopPropagation()">
+        <button onclick="event.stopPropagation(); reset()" style="margin-bottom: 50px">reset</button>
+        <button onclick="event.stopPropagation(); exportBuild()">export to json</button>
+        <button onclick="event.stopPropagation(); exportHumanReadableBuild()" style="margin-bottom: 50px">export human readable</button>
+        <button onclick="event.stopPropagation(); importFromLocalStorage()">load from storage</button>
+        <button onclick="event.stopPropagation(); importBuild()">import from json</button>
+        <input id="importInput" type="text" placeholder="import json build from here" onclick="event.stopPropagation()" />
+      </div>
+    </div>
+  </body>
+</html>
