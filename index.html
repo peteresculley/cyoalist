@@ -130,6 +130,7 @@
           document.getElementById('itemlist').removeChild(newChild);
           recalculate();
           addEditableAtEnd().querySelector('.title').focus();
+          window.scrollTo(0, document.body.scrollHeight);
         }
         function enterListener(event) {
           if (event.key === 'Enter') {
