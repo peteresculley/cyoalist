@@ -82,7 +82,6 @@
         } else {
           document.querySelector('#itemlist > :last-child').remove();
           document.getElementById('itemlist').classList.remove('editmode');
-          recalculate();
         }
         document.querySelectorAll('#itemlist .title').forEach((title) => title.contentEditable = editmode);
         document.querySelectorAll('#itemlist .cost').forEach((cost) => cost.contentEditable = editmode);
@@ -112,7 +111,10 @@
       function recalculate() {
         let acc = 0;
         document.querySelectorAll('#itemlist .cost').forEach((cost) => {
-          acc += parseFloat(cost.innerText || '0');
+          if (cost.innerText !== '') {
+            acc += parseFloat(cost.innerText);
+            cost.title = acc;
+          }
         });
         document.getElementById('pointtotal').innerText = acc;
       }
