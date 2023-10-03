@@ -17,8 +17,19 @@
         font-size: 1.2rem;
         top: 8px;
       }
-      .controls button {
-        margin-right: 20px;
+      .controls .controls-buttons {
+        width: var(--title-width);
+        margin-right: 5px;
+      }
+      .controls button + button {
+        margin-left: 20px;
+      }
+      #editmode {
+        box-sizing: content-box;
+      }
+      #cost-totals {
+        display: flex;
+        flex-direction: row;
       }
       #title {
         font-size: 3em;
@@ -35,10 +46,7 @@
         border-bottom: inset thin;
       }
       .item .title {
-        width: 500px;
-      }
-      .item .cost {
-        width: 100px;
+        width: var(--title-width);
       }
       .remove, .insert {
         visibility: hidden;
@@ -70,66 +78,124 @@
         padding: 8px;
         font-size: 1.5rem;
       }
+      #points-modal-container {
+        padding: 50px;
+        background-color: rgb(210,210,210);
+        border-radius: 25px;
+      }
+      .points {
+        display: flex;
+        flex-direction: row;
+      }
+      .points .points-title::after {
+        content: ':';
+        margin-left: 5px;
+      }
+      .points .points-total {
+        margin-left: 5px;
+      }
     </style>
     <script>
-      let editmode = false;
-      function editmodeClick() {
-        editmode = !editmode;
-        document.getElementById('editmode').innerText = editmode ? 'done' : 'edit';
-        if (editmode) {
-          addEditableAtEnd();
-          document.getElementById('itemlist').classList.add('editmode');
-        } else {
-          document.querySelector('#itemlist > :last-child').remove();
-          document.getElementById('itemlist').classList.remove('editmode');
-        }
-        document.querySelectorAll('#itemlist .title').forEach((title) => title.contentEditable = editmode);
-        document.querySelectorAll('#itemlist .cost').forEach((cost) => cost.contentEditable = editmode);
-        document.getElementById('title').contentEditable = editmode;
+      let editmode, itemlist, buildTitle, costTotals, pointsListing;
+      window.onload = () => {
+        editmode = document.getElementById('editmode');
+        editmode.style = `width: ${Math.max(getTextWidth('edit', editmode), getTextWidth('done', editmode))}px`;
+        itemlist = document.getElementById('itemlist');
+        buildTitle = document.getElementById('title');
+        costTotals = document.getElementById('cost-totals');
+        pointsListing = document.getElementById('points-listing');
+
+        document.addEventListener('keydown', (event) => {
+          if (event.key === 'Escape') {
+            if (isModalOpen()) {
+              closeModals();
+            } else {
+              editmodeClick();
+            }
+          }
+        });
+
+        reset();
+      };
+
+      function getEditMode() {
+        return editmode.innerText !== 'edit';
       }
 
+      function editmodeClick() {
+        const wasEditMode = getEditMode();
+        editmode.innerText = wasEditMode ? 'edit' : 'done';
+        if (wasEditMode) {
+          itemlist.lastChild.remove();
+          itemlist.classList.remove('editmode');
+        } else {
+          addEditableAtEnd();
+          itemlist.classList.add('editmode');
+        }
+        itemlist.querySelectorAll('.title').forEach((title) => title.contentEditable = !wasEditMode);
+        itemlist.querySelectorAll('.cost').forEach((cost) => cost.contentEditable = !wasEditMode);
+        buildTitle.contentEditable = !wasEditMode;
+      }
+
+      const maxTitleWidthDefault = 270;
+      const maxCostWidthDefault = 40;
+
       const modalIds = [
+        'points-modal',
         'import-export-modal'
       ];
       function isModalOpen() {
-        return modalIds.some((id) => document.getElementById(id).style.display !== 'none');
+        return modalIds.some((id) => {
+          const modal = document.getElementById(id);
+          return modal.style.display !== 'none' && modal.style.display;
+        });
       }
       function closeModals() {
         modalIds.forEach((id) => document.getElementById(id).style.display = 'none');
       }
 
-      document.addEventListener('keydown', (event) => {
-        if (event.key === 'Escape') {
-          if (isModalOpen()) {
-            closeModals();
-          } else {
-            editmodeClick();
-          }
-        }
-      });
+      function getNumberOfCosts() {
+        return costTotals.querySelectorAll('.cost-total').length;
+      }
 
       function recalculate() {
-        let acc = 0;
-        document.querySelectorAll('#itemlist .cost').forEach((cost) => {
-          if (cost.innerText !== '') {
-            acc += parseFloat(cost.innerText);
-            cost.title = acc;
-          }
+        for (let c = 0; c < getNumberOfCosts(); c++) {
+          let maxCostWidth = maxCostWidthDefault;
+          let acc = 0;
+          itemlist.querySelectorAll(`.cost${c}`).forEach((cost) => {
+            if (cost.innerText !== '') {
+              acc += parseFloat(cost.innerText);
+              cost.title = formatCost(acc);
+              maxCostWidth = Math.max(maxCostWidth, getTextWidth(cost.innerText, cost) + 5);
+            }
+          });
+          const accText = formatCost(acc);
+          const costTotal =  costTotals.querySelector(`.cost-total${c}`);
+          costTotal.innerText = accText;
+          maxCostWidth = Math.max(maxCostWidth, getTextWidth(accText, costTotal) + 5);
+          document.documentElement.style.setProperty(`--cost${c}-width`, maxCostWidth + 'px');
+        }
+        let maxTitleWidth = maxTitleWidthDefault;
+        itemlist.querySelectorAll('.title').forEach((title) => {
+          maxTitleWidth = Math.max(maxTitleWidth, getTextWidth(title.innerText, title) + 5);
         });
-        document.getElementById('pointtotal').innerText = acc;
+        document.documentElement.style.setProperty('--title-width', maxTitleWidth + 'px');
       }
 
       function addEditableAtEnd() {
         const newChild = document.createElement('div'); newChild.className = 'item';
         const title = document.createElement('input'); title.className = 'title';
-        const cost = document.createElement('input'); cost.className = 'cost'; cost.type = 'number'; cost.step = 'any';
         const add = document.createElement('button'); add.className = 'add'; add.innerText = 'add';
 
         function addItem() {
           const appendToEnd = document.createElement('div');
-          createItem(appendToEnd, title.value, cost.value);
-          document.getElementById('itemlist').appendChild(appendToEnd);
-          document.getElementById('itemlist').removeChild(newChild);
+          const costs = [];
+          for (let c = 0; c < getNumberOfCosts(); c++) {
+            costs[c] = newChild.querySelector(`.cost${c}`).value;
+          }
+          createItem(appendToEnd, title.value, costs);
+          itemlist.appendChild(appendToEnd);
+          itemlist.removeChild(newChild);
           recalculate();
           addEditableAtEnd().querySelector('.title').focus();
           window.scrollTo(0, document.body.scrollHeight);
@@ -141,49 +207,106 @@
           }
         }
         title.addEventListener('keydown', enterListener);
-        cost.addEventListener('keydown', enterListener);
         add.onclick = addItem;
         newChild.appendChild(title);
-        newChild.appendChild(cost);
+
+        for (let c = 0; c < getNumberOfCosts(); c++) {
+          const cost = document.createElement('input');
+          cost.className = `cost cost${c}`;
+          cost.style = `width: var(--cost${c}-width)`;
+          cost.type = 'number'; cost.step = 'any';
+          cost.addEventListener('keydown', enterListener);
+          newChild.appendChild(cost);
+        }
         newChild.appendChild(add);
-        document.getElementById('itemlist').appendChild(newChild);
+        itemlist.appendChild(newChild);
         return newChild;
       }
 
-      function createItem(container, titleText, costText) {
+      function createItem(container, titleText, costs) {
+        const isEditMode = getEditMode();
         container.className = 'item';
         const title = document.createElement('div'); title.className = 'title';
-        title.innerText = titleText; title.contentEditable = editmode;
-        const cost = document.createElement('div'); cost.className = 'cost';
-        cost.innerText = formatCost(costText); cost.contentEditable = editmode;
-        cost.onblur = () => {
-          cost.innerText = formatCost(cost.innerText);
+        title.innerText = titleText; title.contentEditable = isEditMode;
+        title.onblur = () => {
           recalculate();
         };
+        container.appendChild(title);
+
+        for (let c = 0; c < getNumberOfCosts(); c++) {
+          const cost = document.createElement('div'); cost.className = `cost cost${c}`;
+          cost.style = `width: var(--cost${c}-width)`;
+          cost.innerText = formatCost(costs[c]); cost.contentEditable = isEditMode;
+          cost.onblur = () => {
+            cost.innerText = formatCost(cost.innerText);
+            recalculate();
+          };
+          container.appendChild(cost);
+        }
 
         // buttons
         const remove = document.createElement('button'); remove.className = 'remove';
         remove.innerText = 'remove';
         remove.onclick = () => {
-          document.getElementById('itemlist').removeChild(container);
+          itemlist.removeChild(container);
           recalculate();
         };
         const insert = document.createElement('button'); insert.className = 'insert';
         insert.innerText = 'insert';
         insert.onclick = () => {
           const newInsert = document.createElement('div');
-          createItem(newInsert, '', '');
-          document.getElementById('itemlist').insertBefore(newInsert, container);
+          createItem(newInsert, '', []);
+          itemlist.insertBefore(newInsert, container);
         }
 
-        container.appendChild(title);
-        container.appendChild(cost);
         container.appendChild(remove);
         container.appendChild(insert);
       }
 
+      function addNewPointType(title) {
+        const numberOfCosts = getNumberOfCosts();
+
+        const newPointsTotal = document.createElement('div');
+        newPointsTotal.id = `points${numberOfCosts}`;
+        newPointsTotal.className = 'points';
+        const pointsTitle = document.createElement('div');
+        pointsTitle.className = 'points-title';
+        pointsTitle.contentEditable = true;
+        pointsTitle.innerText = title === undefined ? `points ${numberOfCosts + 1}` : title;
+        const pointsTotal = document.createElement('div');
+        pointsTotal.className = 'points-total';
+        pointsTotal.innerText = 0;
+
+        newPointsTotal.appendChild(pointsTitle);
+        newPointsTotal.appendChild(pointsTotal);
+        pointsListing.appendChild(newPointsTotal);
+
+        const newCostTotal = document.createElement('div');
+        newCostTotal.className = `cost-total cost-total${numberOfCosts}`;
+        newCostTotal.style = `width: var(--cost${numberOfCosts}-width)`;
+        newCostTotal.innerText = 0;
+        costTotals.appendChild(newCostTotal);
+
+        if(getEditMode()) {
+          editmodeClick();
+        }
+
+        for (const item of itemlist.children) {
+          const newPoint = document.createElement('div'); newPoint.className = `cost cost${numberOfCosts}`;
+          newPoint.style = `width: var(--cost${numberOfCosts}-width)`;
+          newPoint.innerText = '';
+          newPoint.onblur = () => {
+            newPoint.innerText = formatCost(newPoint.innerText);
+            recalculate();
+          };
+          item.insertBefore(newPoint, item.querySelector('.remove'));
+        }
+
+        recalculate();
+      }
+
       function formatCost(cost) {
-        if (cost === '') {
+        if (cost === '' || cost === undefined) {
           return '';
         }
         try {
@@ -199,23 +322,31 @@
       }
 
       function generateBuild() {
+        const numberOfCosts = getNumberOfCosts();
+        const points = [];
+        pointsListing.querySelectorAll('.points').forEach((point) => {
+          const pointTitle = point.querySelector('.points-title').innerText;
+          points.push({ title: pointTitle });
+        });
         const items = [];
-        document.querySelectorAll('#itemlist .item').forEach((item) => {
+        itemlist.querySelectorAll('.item').forEach((item) => {
           const titleElement = item.querySelector('div.title');
           if (titleElement) {
             const newItem = {
               title: titleElement.innerText
             };
-            const costText = item.querySelector('.cost').innerText;
-            if (costText !== '') {
-              newItem.cost = parseFloat(costText);
+            for (let c = 0; c < numberOfCosts; c++) {
+              const costText = item.querySelector(`.cost${c}`).innerText;
+              if (costText !== '') {
+                newItem[`cost${c}`] = parseFloat(costText);
+              }
             }
             items.push(newItem);
           }
         });
-        const title = document.getElementById('title').innerText;
         return {
-          title,
+          title: buildTitle.innerText,
+          points,
           items
         };
       }
@@ -234,17 +365,26 @@
       }
 
       function importThisBuild(build) {
-        const { title, items } = JSON.parse(build);
-        if (editmode) {
+        const { title, points, items } = JSON.parse(build);
+        if (getEditMode()) {
           editmodeClick();
         }
-        document.getElementById('title').innerText = title;
-        document.getElementById('itemlist').replaceChildren();
-        document.getElementById('pointtotal').innerText = 0;
+        buildTitle.innerText = title;
+        itemlist.replaceChildren();
+        costTotals.replaceChildren();
+        pointsListing.replaceChildren();
+        points.forEach((point) => {
+          addNewPointType(point.title);
+        });
         items.forEach((item) => {
           const appendToEnd = document.createElement('div');
-          createItem(appendToEnd, item.title, item.cost !== undefined ? item.cost : '');
-          document.getElementById('itemlist').appendChild(appendToEnd);
+          const costList = [];
+          points.forEach((point, p) => {
+            const cost = item[`cost${p}`];
+            costList[p] = cost !== undefined ? cost : '';
+          });
+          createItem(appendToEnd, item.title, costList);
+          itemlist.appendChild(appendToEnd);
         });
         recalculate();
       }
@@ -265,7 +405,7 @@
         }
       }
 
-      function exportHumanReadableBuild() {
+      function exportHumanReadableBuild() { // TODO: fix this to work with multiple costs system
         const { title, items } = generateBuild();
         let build = title + '\n\n';
         let runningCost = 0;
@@ -288,36 +428,84 @@
       }
 
       function reset() {
-        if (editmode) {
+        if (getEditMode()) {
           editmodeClick();
         }
-        document.getElementById('title').innerText = 'Title goes here';
-        document.getElementById('itemlist').replaceChildren();
+        buildTitle.innerText = 'Title goes here';
+        itemlist.replaceChildren();
+        costTotals.replaceChildren();
+        pointsListing.replaceChildren();
+        addNewPointType();
+
         recalculate();
+      }
+
+      /**
+        * Uses canvas.measureText to compute and return the width of the given text of given font in pixels.
+        * 
+        * @param {String} text The text to be rendered.
+        * @param {Element} element to get the css font descriptor that text is to be rendered with (e.g. "bold 14px verdana").
+        * 
+        * @see https://stackoverflow.com/questions/118241/calculate-text-width-with-javascript/21015393#21015393
+        */
+      function getTextWidth(text, el) {
+        // re-use canvas object for better performance
+        const canvas = getTextWidth.canvas || (getTextWidth.canvas = document.createElement("canvas"));
+        const context = canvas.getContext("2d");
+        context.font = getCanvasFont(el);
+        const metrics = context.measureText(text);
+        return metrics.width;
+      }
+
+      function getCssStyle(element, prop) {
+          return window.getComputedStyle(element, null).getPropertyValue(prop);
+      }
+
+      function getCanvasFont(el) {
+        const fontWeight = getCssStyle(el, 'font-weight') || 'normal';
+        const fontSize = getCssStyle(el, 'font-size') || '16px';
+        const fontFamily = getCssStyle(el, 'font-family') || 'Times New Roman';
+        
+        return `${fontWeight} ${fontSize} ${fontFamily}`;
       }
     </script>
   </head>
   <body>
     <div class="container">
       <div class="controls">
-        <button id="editmode" onclick="editmodeClick()">edit</button>
-        <button id="recalculate" onclick="recalculate()">recalculate</button>
-        <div id="pointtotal">0</div>
-        <div style="flex-grow: 1"></div>
-        <button onclick="document.getElementById('import-export-modal').style.display = 'flex'" style="margin-left: 50px; margin-right: 0">import/export</button>
+        <div class="controls-buttons">
+          <button id="editmode" onclick="editmodeClick()">edit</button>
+          <button onclick="document.getElementById('points-modal').style.display = 'flex'">points</button>
+          <button onclick="document.getElementById('import-export-modal').style.display = 'flex'">import/export</button>
+        </div>
+        <div id="cost-totals">
+          <div class="cost-total cost-total0" style="width: var(--cost0-width)">0</div>
+        </div>
+        <div id="control-bar-filler" style="flex-grow: 1"></div>
       </div>
       <div id="content-container">
         <div id="title">Title goes here</div>
         <div id="itemlist"></div>
       </div>
     </div>
+    <div id="points-modal" class="modal" onclick="closeModals()">
+      <div id="points-modal-container" class="modal-container" onclick="event.stopPropagation()">
+        <button onclick="addNewPointType()">add new</button>
+        <div id="points-listing">
+          <div id="points0" class="points">
+            <div class="points-title" contenteditable>points 1</div>
+            <div class="points-total">0</div>
+          </div>
+        </div>
+      </div>
+    </div>
     <div id="import-export-modal" class="modal" onclick="closeModals()">
       <div id="import-export-modal-container" class="modal-container" onclick="event.stopPropagation()">
-        <button onclick="event.stopPropagation(); reset()" style="margin-bottom: 50px">reset</button>
-        <button onclick="event.stopPropagation(); exportBuild()">export to json</button>
-        <button onclick="event.stopPropagation(); exportHumanReadableBuild()" style="margin-bottom: 50px">export human readable</button>
-        <button onclick="event.stopPropagation(); importFromLocalStorage()">load from storage</button>
-        <button onclick="event.stopPropagation(); importBuild()">import from json</button>
+        <button onclick="reset()" style="margin-bottom: 50px">reset</button>
+        <button onclick="exportBuild()">export to json</button>
+        <button onclick="exportHumanReadableBuild()" style="margin-bottom: 50px">export human readable</button>
+        <button onclick="importFromLocalStorage()">load from storage</button>
+        <button onclick="importBuild()">import from json</button>
         <input id="importInput" type="text" placeholder="import json build from here" onclick="event.stopPropagation()" />
       </div>
     </div>
